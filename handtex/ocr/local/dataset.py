@@ -165,6 +165,7 @@ def build_dataset(
     seed: int = 0,
     handwriting_fonts: Optional[List[str]] = None,
     handwriting_oversample: int = 5,
+    math_oversample: int = 4,
     doodle_samples: int = 1500,
     progress: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
@@ -203,6 +204,9 @@ def build_dataset(
             continue  # synthesized separately below, not from a font
         sym = symbols.by_name(name)
         char = sym.char
+        # Greek/math symbols (non-ASCII) are the weak spot — no handwriting
+        # fonts cover them — so oversample their (printed) renderings.
+        is_focus = not char.isascii()
         for path, is_hw in fonts:
             if not font_covers(path, char):
                 continue
@@ -214,6 +218,8 @@ def build_dataset(
             if base.max() <= 0:
                 continue
             variants = per_class_per_font * (handwriting_oversample if is_hw else 1)
+            if is_focus:
+                variants *= math_oversample
             # one clean sample + augmented variants
             X.append(normalize_glyph(base)); y.append(label_to_idx[name])
             for _ in range(variants):

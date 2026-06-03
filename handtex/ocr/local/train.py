@@ -26,6 +26,7 @@ def train(
     lr: float = 1e-3,
     per_class_per_font: int = 4,
     max_fonts: int = 40,
+    math_oversample: int = 4,
     val_frac: float = 0.1,
     seed: int = 0,
     verbose: bool = True,
@@ -35,7 +36,8 @@ def train(
     t0 = time.time()
     if verbose:
         print("synthesizing dataset...")
-    X, y, labels = build_dataset(per_class_per_font=per_class_per_font, max_fonts=max_fonts, seed=seed)
+    X, y, labels = build_dataset(per_class_per_font=per_class_per_font, max_fonts=max_fonts,
+                                 math_oversample=math_oversample, seed=seed)
     if verbose:
         print(f"  {X.shape[0]} samples, {len(labels)} classes, {time.time()-t0:.1f}s")
 
@@ -95,9 +97,12 @@ def main(argv=None) -> int:
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--per-class-per-font", type=int, default=4)
     p.add_argument("--max-fonts", type=int, default=40)
+    p.add_argument("--math-oversample", type=int, default=4,
+                   help="extra sample multiplier for Greek/math symbol classes")
     args = p.parse_args(argv)
     train(epochs=args.epochs, batch_size=args.batch_size, lr=args.lr,
-          per_class_per_font=args.per_class_per_font, max_fonts=args.max_fonts)
+          per_class_per_font=args.per_class_per_font, max_fonts=args.max_fonts,
+          math_oversample=args.math_oversample)
     return 0
 
 

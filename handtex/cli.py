@@ -108,7 +108,7 @@ def _cmd_train_ocr(args: argparse.Namespace) -> int:
     from .ocr.local.train import train
 
     acc = train(epochs=args.epochs, per_class_per_font=args.per_class_per_font,
-                max_fonts=args.max_fonts)
+                max_fonts=args.max_fonts, math_oversample=args.math_oversample)
     print(f"final val_acc={acc:.3f}")
     return 0
 
@@ -191,6 +191,8 @@ def build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--epochs", type=int, default=12)
     tr.add_argument("--per-class-per-font", type=int, default=4)
     tr.add_argument("--max-fonts", type=int, default=40)
+    tr.add_argument("--math-oversample", type=int, default=4,
+                    help="extra sample multiplier for Greek/math symbol classes")
     tr.set_defaults(func=_cmd_train_ocr)
 
     d = sub.add_parser("demo", help="run the full synthetic pipeline end-to-end")
