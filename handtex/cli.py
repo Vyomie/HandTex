@@ -54,6 +54,20 @@ def _cmd_build_font(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_font_from_image(args: argparse.Namespace) -> int:
+    from .font.from_image import font_from_image
+
+    meta = FontMeta(family=args.family)
+    _, cells = font_from_image(args.image, args.out, meta=meta,
+                               top_crop_frac=args.top_crop, min_confidence=args.min_conf)
+    uniq = len({c.name for c in cells})
+    print(f"recognized {len(cells)} glyphs ({uniq} unique) -> built {args.out}")
+    if args.show:
+        for c in sorted(cells, key=lambda c: (c.segment.bbox.cy, c.segment.bbox.left)):
+            print(f"  {c.char!r:6} conf={c.confidence:.2f}")
+    return 0
+
+
 def _cmd_read(args: argparse.Namespace) -> int:
     backend = get_backend(args.backend)
     glyphs = backend.recognize(args.image)
@@ -72,6 +86,15 @@ def _cmd_read(args: argparse.Namespace) -> int:
             return 2
         render_document(doc, args.font, args.png)
         print(f"wrote render -> {args.png}", file=sys.stderr)
+    return 0
+
+
+def _cmd_train_ocr(args: argparse.Namespace) -> int:
+    from .ocr.local.train import train
+
+    acc = train(epochs=args.epochs, per_class_per_font=args.per_class_per_font,
+                max_fonts=args.max_fonts)
+    print(f"final val_acc={acc:.3f}")
     return 0
 
 
@@ -125,14 +148,29 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--out", default="HandTex-Regular.ttf")
     b.set_defaults(func=_cmd_build_font)
 
+    fi = sub.add_parser("font-from-image", help="OCR a handwriting photo and build a font (end-to-end)")
+    fi.add_argument("image")
+    fi.add_argument("--out", default="HandFromImage-Regular.ttf")
+    fi.add_argument("--family", default="HandTex")
+    fi.add_argument("--top-crop", type=float, default=0.0, help="ignore this top fraction (e.g. a title bar)")
+    fi.add_argument("--min-conf", type=float, default=0.0, help="drop glyphs below this confidence")
+    fi.add_argument("--show", action="store_true", help="print recognized glyphs")
+    fi.set_defaults(func=_cmd_font_from_image)
+
     r = sub.add_parser("read", help="read a whiteboard image -> LaTeX / render")
     r.add_argument("image")
-    r.add_argument("--backend", default="mock", choices=["mock", "vision"])
+    r.add_argument("--backend", default="mock", choices=["mock", "local", "vision"])
     r.add_argument("--tex", help="write LaTeX to this path")
     r.add_argument("--standalone", action="store_true", help="emit a full compilable .tex")
     r.add_argument("--png", help="render result to this PNG (needs --font)")
     r.add_argument("--font", help="a HandTex .ttf to render with")
     r.set_defaults(func=_cmd_read)
+
+    tr = sub.add_parser("train-ocr", help="train the small local OCR model on synthetic data")
+    tr.add_argument("--epochs", type=int, default=12)
+    tr.add_argument("--per-class-per-font", type=int, default=4)
+    tr.add_argument("--max-fonts", type=int, default=40)
+    tr.set_defaults(func=_cmd_train_ocr)
 
     d = sub.add_parser("demo", help="run the full synthetic pipeline end-to-end")
     d.add_argument("--out", default="out")

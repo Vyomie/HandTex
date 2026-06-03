@@ -17,8 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+local = ["torch>=2.0"]
 vision = ["anthropic>=0.39"]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "torch>=2.0"]
 
 [project.scripts]
 handtex = "handtex.cli:main"

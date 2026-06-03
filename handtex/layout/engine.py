@@ -31,7 +31,7 @@ from ..font.symbols import VHint
 class LayoutParams:
     # A glyph is "small" (candidate super/subscript) when its height is below
     # this fraction of the line's base height.
-    small_ratio: float = 0.68
+    small_ratio: float = 0.74
     # Percentile of glyph heights used to estimate the base (body) height.
     base_height_pct: float = 70.0
     # Fraction of base height a small glyph's center must rise above / drop
@@ -104,9 +104,54 @@ def _group_lines(glyphs: List[RecognizedGlyph], params: LayoutParams) -> List[Li
         else:
             lines.append([g])
 
+    lines = _merge_script_lines(lines, base_h)
+
     for line in lines:
         line.sort(key=lambda g: g.bbox.left)
     lines.sort(key=lambda line: statistics.median(g.bbox.cy for g in line))
+    return lines
+
+
+def _merge_script_lines(lines: List[List[RecognizedGlyph]], base_h: float) -> List[List[RecognizedGlyph]]:
+    """Pull fragment-lines (a raised exponent / lowered index that seeded its
+    own line) back into the line they belong to.
+
+    A line merges into another when its horizontal span is largely *contained*
+    within the other's and it sits vertically adjacent — which is true of
+    scripts but not of genuinely separate text lines (those are spaced apart).
+    """
+    def span(line):
+        return min(g.bbox.left for g in line), max(g.bbox.right for g in line)
+
+    def band(line):
+        return min(g.bbox.top for g in line), max(g.bbox.bottom for g in line)
+
+    merged = True
+    while merged and len(lines) > 1:
+        merged = False
+        for i in range(len(lines)):
+            for j in range(len(lines)):
+                if i == j:
+                    continue
+                a, b = lines[i], lines[j]  # try to merge a (fragment) into b (host)
+                al, ar = span(a)
+                bl, br = span(b)
+                aw = max(1.0, ar - al)
+                if (ar - al) > (br - bl):
+                    continue  # a must be the narrower fragment
+                overlap = max(0.0, min(ar, br) - max(al, bl)) / aw
+                if overlap < 0.6:
+                    continue
+                at, ab = band(a)
+                bt, bb = band(b)
+                gap = max(at, bt) - min(ab, bb)  # vertical gap between bands
+                if gap < 0.8 * base_h:
+                    b.extend(a)
+                    lines.pop(i)
+                    merged = True
+                    break
+            if merged:
+                break
     return lines
 
 

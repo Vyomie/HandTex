@@ -13,11 +13,14 @@ __all__ = ["OCRBackend", "MockBackend", "get_backend"]
 
 
 def get_backend(name: str, **kwargs) -> OCRBackend:
-    """Factory: resolve a backend by name (``"mock"`` or ``"vision"``)."""
+    """Factory: resolve a backend by name (``"mock"``, ``"local"`` or ``"vision"``)."""
     name = (name or "mock").lower()
     if name == "mock":
         return MockBackend(**kwargs)
+    if name == "local":
+        from .local import LocalBackend  # imported lazily; needs torch + weights
+        return LocalBackend(**kwargs)
     if name == "vision":
         from .vision import VisionBackend  # imported lazily; needs a network/SDK
         return VisionBackend(**kwargs)
-    raise ValueError(f"unknown OCR backend: {name!r} (try 'mock' or 'vision')")
+    raise ValueError(f"unknown OCR backend: {name!r} (try 'mock', 'local' or 'vision')")

@@ -5,7 +5,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-if python3 -c "import fontTools, PIL, numpy, skimage, pytest" >/dev/null 2>&1; then
+if python3 -c "import fontTools, PIL, numpy, skimage, pytest, torch" >/dev/null 2>&1; then
   echo "HandTex deps already present."
   exit 0
 fi
