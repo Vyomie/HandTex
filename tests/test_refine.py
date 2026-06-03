@@ -37,6 +37,18 @@ def test_duplicate_removed_when_no_good_alternative():
     assert [r.label for r in out] == ["x"]
 
 
+def test_weak_doodle_keeps_real_guess():
+    # doodle is top but not confident -> keep the best real guess, don't drop
+    cands = [C(0, 0, 0, 40, 40, [("doodle", 0.45), ("e", 0.40)])]
+    out = refine(cands, unique_labels=False)
+    assert [r.label for r in out] == ["e"]
+
+
+def test_confident_doodle_still_removed():
+    cands = [C(0, 0, 0, 40, 40, [("doodle", 0.85), ("e", 0.05)])]
+    assert refine(cands, unique_labels=False) == []
+
+
 def test_repeats_allowed_when_not_unique():
     cands = [
         C(0, 0, 0, 40, 40, [("x", 0.9)]),

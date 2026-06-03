@@ -76,24 +76,36 @@ DOODLE_LABEL = "doodle"
 
 
 def _make_doodle(rng: random.Random) -> np.ndarray:
-    """Synthesize a random scribble/blob: a 'gibberish' reject sample."""
+    """Synthesize a random scribble/blob: a 'gibberish' reject sample.
+
+    Doodles are intentionally *complex* (several crossing/squiggly strokes or
+    blobs) so they stay visually distinct from clean single-stroke glyphs like
+    ``/ 1 - l``, which a real classifier must keep.
+    """
     S = 56
     img = Image.new("L", (S, S), 0)
     d = ImageDraw.Draw(img)
-    for _ in range(rng.randint(1, 4)):
-        pts = [(rng.randint(3, S - 3), rng.randint(3, S - 3))
-               for _ in range(rng.randint(2, 6))]
-        d.line(pts, fill=255, width=rng.randint(2, 6), joint="curve")
-    if rng.random() < 0.35:  # a filled blob
-        x0, y0 = rng.randint(2, S - 22), rng.randint(2, S - 22)
-        d.ellipse([x0, y0, x0 + rng.randint(8, 26), y0 + rng.randint(8, 26)], fill=255)
-    if rng.random() < 0.3:   # crossing scribble
-        for _ in range(rng.randint(2, 5)):
-            d.line([(rng.randint(0, S), rng.randint(0, S)),
-                    (rng.randint(0, S), rng.randint(0, S))],
-                   fill=255, width=rng.randint(1, 4))
+    kind = rng.random()
+    if kind < 0.55:                      # multi-stroke squiggle (crossing)
+        for _ in range(rng.randint(3, 6)):
+            pts = [(rng.randint(2, S - 2), rng.randint(2, S - 2))
+                   for _ in range(rng.randint(3, 7))]
+            d.line(pts, fill=255, width=rng.randint(2, 6), joint="curve")
+    elif kind < 0.8:                     # dense short-stroke scribble
+        for _ in range(rng.randint(8, 18)):
+            x, y = rng.randint(6, S - 6), rng.randint(6, S - 6)
+            d.line([(x, y), (x + rng.randint(-16, 16), y + rng.randint(-16, 16))],
+                   fill=255, width=rng.randint(2, 5))
+    else:                                # blobs / fills
+        for _ in range(rng.randint(1, 3)):
+            x0, y0 = rng.randint(2, S - 26), rng.randint(2, S - 26)
+            d.ellipse([x0, y0, x0 + rng.randint(10, 30), y0 + rng.randint(10, 30)], fill=255)
+        for _ in range(rng.randint(1, 3)):
+            pts = [(rng.randint(2, S - 2), rng.randint(2, S - 2)) for _ in range(rng.randint(3, 6))]
+            d.line(pts, fill=255, width=rng.randint(2, 6), joint="curve")
+
     arr = np.asarray(img, dtype=np.float32) / 255.0
-    if rng.random() < 0.3:   # speckle
+    if rng.random() < 0.25:              # speckle noise
         arr = np.clip(arr + (np.random.rand(S, S) < 0.02).astype(np.float32), 0, 1)
     return _augment_array(arr, rng)
 
@@ -153,7 +165,7 @@ def build_dataset(
     seed: int = 0,
     handwriting_fonts: Optional[List[str]] = None,
     handwriting_oversample: int = 5,
-    doodle_samples: int = 2500,
+    doodle_samples: int = 1500,
     progress: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     """Render the full synthetic dataset.

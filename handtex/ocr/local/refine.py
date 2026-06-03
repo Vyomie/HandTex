@@ -57,12 +57,19 @@ def refine(
     *,
     unique_labels: bool,
     doodle_label: str = DOODLE,
+    doodle_reject_prob: float = 0.60,
     min_prob: float = 0.12,
     small_ratio: float = 0.10,
     large_ratio: float = 8.0,
     overlap_iou: float = 0.55,
 ) -> List[Resolved]:
-    """Apply the refinement rules; return the surviving, resolved detections."""
+    """Apply the refinement rules; return the surviving, resolved detections.
+
+    A box is only thrown out as gibberish when ``doodle`` is the top guess
+    *and* its probability clears ``doodle_reject_prob``. Otherwise the
+    ``doodle`` option is ignored and the box keeps its best real guess — so a
+    merely-uncertain real glyph is never silently deleted.
+    """
     if not candidates:
         return []
 
@@ -76,16 +83,21 @@ def refine(
             continue
         kept.append(c)
 
-    # (1)+(2) Size awareness + doodle removal.
+    # (1)+(2) Doodle removal (only when confident) + size awareness.
     survivors: List[Candidate] = []
     for c in kept:
         top_label, top_prob = c.options[0]
-        if top_label == doodle_label:
+        if top_label == doodle_label and top_prob >= doodle_reject_prob:
+            continue  # confident gibberish -> remove
+        # Drop the doodle option so an uncertain real glyph keeps its best
+        # real guess instead of being deleted.
+        real_opts = [(l, p) for (l, p) in c.options if l != doodle_label]
+        if not real_opts:
             continue
         ratio = c.bbox.area / median_area
-        if (ratio < small_ratio or ratio > large_ratio) and top_prob < 0.55:
+        if (ratio < small_ratio or ratio > large_ratio) and real_opts[0][1] < 0.55:
             continue
-        survivors.append(c)
+        survivors.append(Candidate(c.index, c.bbox, real_opts))
 
     # (4) Duplicate resolution by demotion to the next-best guess.
     results: List[Resolved] = []
@@ -93,8 +105,8 @@ def refine(
     for c in sorted(survivors, key=lambda c: -c.options[0][1]):
         chosen = None
         for label, prob in c.options:
-            if label == doodle_label or prob < min_prob:
-                break  # nothing better than gibberish/noise left -> bad
+            if prob < min_prob:
+                break  # nothing plausible left -> bad
             if not unique_labels or label not in taken:
                 chosen = (label, prob)
                 break

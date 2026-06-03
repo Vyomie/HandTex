@@ -28,11 +28,12 @@ python -m handtex font-from-image paper.jpg --out PaperHand.ttf --annotate annot
   print-trained) and on genuinely ambiguous upper/lower pairs (`C/c`, `O/o`,
   `V/v`, `X/x`).
 - **Refinement (situational awareness)**: a `doodle` reject class removes the
-  inkblot and stray marks (16 dropped here); size-outlier + low-confidence
-  boxes are pruned; and on this character sheet, duplicate labels are resolved
-  by confidence (the loser falls back to its 2nd-best guess, or is dropped) so
-  every surviving box is a unique glyph. Tradeoff: a few unusual real symbols
-  (the integral, some brackets) can be swept up as `doodle`.
+  inkblot and stray marks — but only when the model is *confidently* doodle, so
+  real glyphs are kept (4 removed here, down from 16 before the threshold +
+  cleaner doodle training). Size-outlier + low-confidence boxes are pruned, and
+  on this character sheet duplicate labels are resolved by confidence (the
+  loser falls back to its 2nd-best guess, or is dropped) so every surviving box
+  is a unique glyph (84 kept).
 - **Multi-row page layout**: improved (a spurious full-height shadow no longer
   collapses everything; rows separate), but a dense 9-row page is still harder
   than a single equation — per-row super/subscript grouping on a full page is
