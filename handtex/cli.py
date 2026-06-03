@@ -72,6 +72,11 @@ def _cmd_font_from_image(args: argparse.Namespace) -> int:
                                top_crop_frac=args.top_crop, min_confidence=args.min_conf)
     uniq = len({c.name for c in cells})
     print(f"recognized {len(cells)} glyphs ({uniq} unique) -> built {args.out}")
+    if args.annotate:
+        from .visualize import annotate_recognition
+        from .preprocess import preprocess
+        annotate_recognition(preprocess(args.image), cells, args.annotate)
+        print(f"wrote confidence-colored annotation -> {args.annotate}")
     if args.show:
         for c in sorted(cells, key=lambda c: (c.segment.bbox.cy, c.segment.bbox.left)):
             print(f"  {c.char!r:6} conf={c.confidence:.2f}")
@@ -170,6 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
     fi.add_argument("--top-crop", type=float, default=0.0, help="ignore this top fraction (e.g. a title bar)")
     fi.add_argument("--min-conf", type=float, default=0.0, help="drop glyphs below this confidence")
     fi.add_argument("--show", action="store_true", help="print recognized glyphs")
+    fi.add_argument("--annotate", help="write a confidence-colored annotated image to this path")
     fi.set_defaults(func=_cmd_font_from_image)
 
     r = sub.add_parser("read", help="read a whiteboard image -> LaTeX / render")

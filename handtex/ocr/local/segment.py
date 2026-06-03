@@ -77,6 +77,15 @@ def segment_image(image_path: str, min_area_frac: float = 0.0001,
             continue
         boxes.append(BBox(minc, minr, maxc - minc, maxr - minr))
 
+    # Drop non-glyph blobs (page edges, shadows, margin rules) that are far
+    # taller than the text — they would otherwise span many rows and collapse
+    # them into one line. Tall real glyphs (integrals, brackets) stay well
+    # under the threshold.
+    if len(boxes) >= 5:
+        import statistics
+        med_h = statistics.median(b.h for b in boxes)
+        boxes = [b for b in boxes if b.h <= 6.0 * med_h]
+
     boxes = _merge_stacked(boxes)
     boxes.sort(key=lambda b: b.left)
 

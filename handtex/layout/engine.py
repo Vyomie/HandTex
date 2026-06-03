@@ -137,8 +137,12 @@ def _merge_script_lines(lines: List[List[RecognizedGlyph]], base_h: float) -> Li
                 al, ar = span(a)
                 bl, br = span(b)
                 aw = max(1.0, ar - al)
-                if (ar - al) > (br - bl):
-                    continue  # a must be the narrower fragment
+                bw = max(1.0, br - bl)
+                # a must be a *narrow* fragment (a raised exponent / lowered
+                # index), not a full text row of comparable width — otherwise
+                # whole lines would get merged together.
+                if aw > 0.5 * bw:
+                    continue
                 overlap = max(0.0, min(ar, br) - max(al, bl)) / aw
                 if overlap < 0.6:
                     continue
