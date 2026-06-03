@@ -11,7 +11,7 @@
   }
   *{box-sizing:border-box}
   body{margin:0;font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
-  header{display:flex;align-items:center;gap:16px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header{display:flex;align-items:center;justify-content:center;gap:16px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
   header h1{font-size:16px;margin:0;letter-spacing:.3px}
   header h1 span{color:var(--accent)}
   .grow{flex:1}
@@ -52,7 +52,6 @@
   <h1>Hand<span>Tex</span> · Handwriting Studio</h1>
   <span class="pill" id="progress">0 / 0</span>
   <span class="pill" id="doneCount">0 drawn</span>
-  <div class="grow"></div>
   <label class="ctl">Pen <input type="range" id="pen" min="4" max="34" value="14"></label>
   <label class="ctl"><input type="checkbox" id="guideRef" checked> trace guide</label>
 </header>
