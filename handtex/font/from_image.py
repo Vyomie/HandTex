@@ -18,8 +18,9 @@ import numpy as np
 from . import symbols
 from .build import FontMeta, GlyphOutline, build_font
 from .trace import trace_bitmap
-from ..ocr.local.model import has_weights, load_model, predict
+from ..ocr.local.model import has_weights, load_model, predict_topk
 from ..ocr.local.normalize import normalize_glyph
+from ..ocr.local.refine import Candidate, refine
 from ..ocr.local.segment import Segment, segment_image
 
 
@@ -48,16 +49,25 @@ def recognize_cells(image_path: str, top_crop_frac: float = 0.0,
 
     model, labels = load_model()
     batch = np.stack([normalize_glyph(s.ink) for s in segments])
-    idx, conf = predict(model, batch)
+    idxk, confk = predict_topk(model, batch, k=4)
+
+    # Refinement with situational awareness; a character sheet is expected to
+    # contain each glyph once, so resolve duplicates by uniqueness.
+    cands = [
+        Candidate(index=n, bbox=segments[n].bbox,
+                  options=[(labels[int(idxk[n][j])], float(confk[n][j]))
+                           for j in range(idxk.shape[1])])
+        for n in range(len(segments))
+    ]
+    resolved = refine(cands, unique_labels=True)
 
     cells: List[RecognizedCell] = []
-    for seg, i, c in zip(segments, idx, conf):
-        if c < min_confidence:
+    for r in resolved:
+        if r.confidence < min_confidence:
             continue
-        name = labels[int(i)]
-        sym = symbols.by_name(name)
-        cells.append(RecognizedCell(name=name, char=sym.char if sym else name,
-                                    confidence=float(c), segment=seg))
+        sym = symbols.by_name(r.label)
+        cells.append(RecognizedCell(name=r.label, char=sym.char if sym else r.label,
+                                    confidence=r.confidence, segment=segments[r.index]))
     return cells
 
 

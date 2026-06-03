@@ -41,8 +41,18 @@ reasoning, so the model only has to classify one glyph at a time:
 ```
 image ─► segment (connected components, merge stacked marks like =, i, ÷)
       ─► normalize each glyph to 32×32
-      ─► GlyphCNN  (~174k params)  ─► symbol name + confidence + bbox
+      ─► GlyphCNN  (~174k params)  ─► top-k guesses + bbox
+      ─► refine (situational awareness)  ─► clean glyph list
 ```
+
+**Refinement** (`handtex.ocr.local.refine`) adds context the per-glyph model
+lacks: it compares each box's size to the median glyph and drops tiny/huge
+*and* unconfident boxes; removes anything classified as the `doodle` reject
+class (scribbles, inkblots); drops the lower-confidence box of an overlapping
+pair; and — when building a font from a character sheet — resolves duplicate
+labels by keeping the most confident, demoting the other to its next-best
+guess (or removing it if that's `doodle`/too weak). Visualize results with
+`handtex font-from-image IMG --annotate out.png` (boxes colored by confidence).
 
 It is bootstrapped on **synthetic data** — every symbol rendered across all
 installed fonts *plus a set of real handwriting fonts*

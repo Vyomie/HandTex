@@ -73,3 +73,17 @@ def predict(model: GlyphCNN, glyphs: np.ndarray, device: str = "cpu") -> Tuple[n
     probs = torch.softmax(logits, dim=1)
     conf, idx = probs.max(dim=1)
     return idx.cpu().numpy(), conf.cpu().numpy()
+
+
+@torch.no_grad()
+def predict_topk(model: GlyphCNN, glyphs: np.ndarray, k: int = 3,
+                 device: str = "cpu") -> Tuple[np.ndarray, np.ndarray]:
+    """Return the top-``k`` ``(indices, probabilities)`` per glyph, ``(N, k)``.
+
+    Used by the refinement step to demote a duplicate to its next-best guess.
+    """
+    x = torch.from_numpy(glyphs.astype(np.float32)).view(-1, 1, OUT_SIZE, OUT_SIZE).to(device)
+    probs = torch.softmax(model(x), dim=1)
+    k = min(k, probs.shape[1])
+    conf, idx = probs.topk(k, dim=1)
+    return idx.cpu().numpy(), conf.cpu().numpy()

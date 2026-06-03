@@ -15,8 +15,9 @@ import numpy as np
 from ...font import symbols
 from ...types import RecognizedGlyph
 from ..base import OCRBackend
-from .model import GlyphCNN, has_weights, load_model, predict
+from .model import GlyphCNN, has_weights, load_model, predict_topk
 from .normalize import normalize_glyph
+from .refine import Candidate, refine
 from .segment import segment_image
 
 
@@ -40,20 +41,26 @@ class LocalBackend(OCRBackend):
             return []
 
         batch = np.stack([normalize_glyph(seg.ink) for seg in segments])
-        idx, conf = predict(self._model, batch, device=self._device)
+        idxk, confk = predict_topk(self._model, batch, k=4, device=self._device)
+
+        # Refine: drop doodles, size-outliers and overlapping duplicates.
+        # Repeated characters are legitimate when reading text, so do NOT
+        # enforce label uniqueness here.
+        cands = [
+            Candidate(index=n, bbox=segments[n].bbox,
+                      options=[(self._labels[int(idxk[n][j])], float(confk[n][j]))
+                               for j in range(idxk.shape[1])])
+            for n in range(len(segments))
+        ]
+        resolved = refine(cands, unique_labels=False)
 
         out: List[RecognizedGlyph] = []
-        for seg, i, c in zip(segments, idx, conf):
-            if c < self._min_confidence:
+        for r in resolved:
+            if r.confidence < self._min_confidence:
                 continue
-            name = self._labels[int(i)]
-            sym = symbols.by_name(name)
+            sym = symbols.by_name(r.label)
             out.append(
-                RecognizedGlyph(
-                    name=name,
-                    text=sym.char if sym else name,
-                    bbox=seg.bbox,
-                    confidence=float(c),
-                )
+                RecognizedGlyph(name=r.label, text=sym.char if sym else r.label,
+                                bbox=segments[r.index].bbox, confidence=r.confidence)
             )
         return out

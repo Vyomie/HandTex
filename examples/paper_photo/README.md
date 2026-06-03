@@ -9,7 +9,7 @@ real-world input.
 |------|------------|
 | `paper.jpg` | the original phone photo (off-white paper, shadow, slight tilt) |
 | `paper_preprocessed.png` | after `handtex.preprocess`: resized, illumination-flattened, contrast-stretched, deskewed |
-| `paper_annotated.png` | OCR result — each glyph boxed and **colored by confidence** (red = low → green = high; legend top-left). No numbers, just color. |
+| `paper_annotated.png` | OCR result after **refinement** — each glyph boxed and **colored by confidence** (red = low → green = high; legend top-left). The inkblot after "MN" is gone (classified `doodle` and removed); duplicates were resolved so every box is a unique glyph. |
 
 Reproduce:
 
@@ -27,6 +27,12 @@ python -m handtex font-from-image paper.jpg --out PaperHand.ttf --annotate annot
   (handwriting-trained model); weaker on Greek/math symbols (still mostly
   print-trained) and on genuinely ambiguous upper/lower pairs (`C/c`, `O/o`,
   `V/v`, `X/x`).
+- **Refinement (situational awareness)**: a `doodle` reject class removes the
+  inkblot and stray marks (16 dropped here); size-outlier + low-confidence
+  boxes are pruned; and on this character sheet, duplicate labels are resolved
+  by confidence (the loser falls back to its 2nd-best guess, or is dropped) so
+  every surviving box is a unique glyph. Tradeoff: a few unusual real symbols
+  (the integral, some brackets) can be swept up as `doodle`.
 - **Multi-row page layout**: improved (a spurious full-height shadow no longer
   collapses everything; rows separate), but a dense 9-row page is still harder
   than a single equation — per-row super/subscript grouping on a full page is

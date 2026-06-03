@@ -72,6 +72,39 @@ def class_names() -> List[str]:
     return [s.name for s in symbols.all_symbols() if s.char != " "]
 
 
+DOODLE_LABEL = "doodle"
+
+
+def _make_doodle(rng: random.Random) -> np.ndarray:
+    """Synthesize a random scribble/blob: a 'gibberish' reject sample."""
+    S = 56
+    img = Image.new("L", (S, S), 0)
+    d = ImageDraw.Draw(img)
+    for _ in range(rng.randint(1, 4)):
+        pts = [(rng.randint(3, S - 3), rng.randint(3, S - 3))
+               for _ in range(rng.randint(2, 6))]
+        d.line(pts, fill=255, width=rng.randint(2, 6), joint="curve")
+    if rng.random() < 0.35:  # a filled blob
+        x0, y0 = rng.randint(2, S - 22), rng.randint(2, S - 22)
+        d.ellipse([x0, y0, x0 + rng.randint(8, 26), y0 + rng.randint(8, 26)], fill=255)
+    if rng.random() < 0.3:   # crossing scribble
+        for _ in range(rng.randint(2, 5)):
+            d.line([(rng.randint(0, S), rng.randint(0, S)),
+                    (rng.randint(0, S), rng.randint(0, S))],
+                   fill=255, width=rng.randint(1, 4))
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+    if rng.random() < 0.3:   # speckle
+        arr = np.clip(arr + (np.random.rand(S, S) < 0.02).astype(np.float32), 0, 1)
+    return _augment_array(arr, rng)
+
+
+def _augment_array(arr: np.ndarray, rng: random.Random) -> np.ndarray:
+    """Normalize + light jitter (shared tail of glyph augmentation)."""
+    norm = normalize_glyph(arr)
+    dx, dy = rng.randint(-2, 2), rng.randint(-2, 2)
+    return np.clip(np.roll(norm, (dy, dx), axis=(0, 1)), 0.0, 1.0)
+
+
 def _render_glyph(char: str, font: ImageFont.FreeTypeFont, canvas: int = 64) -> np.ndarray:
     img = Image.new("L", (canvas, canvas), 0)
     draw = ImageDraw.Draw(img)
@@ -120,21 +153,25 @@ def build_dataset(
     seed: int = 0,
     handwriting_fonts: Optional[List[str]] = None,
     handwriting_oversample: int = 5,
+    doodle_samples: int = 2500,
     progress: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     """Render the full synthetic dataset.
 
     Print fonts give broad coverage (incl. Greek/math); handwriting fonts are
     *oversampled* so the classifier generalizes to real handwriting for the
-    Latin letters, digits and punctuation they cover.
+    Latin letters, digits and punctuation they cover. A ``doodle`` reject class
+    of random scribbles lets the model flag gibberish for removal.
 
     Returns ``(X, y, labels)`` where ``X`` is ``(N, OUT_SIZE, OUT_SIZE)``
     float32, ``y`` is ``(N,)`` int64 class indices, and ``labels`` maps index
-    to symbol name.
+    to symbol name (the last label is ``doodle`` when ``doodle_samples`` > 0).
     """
     rng = random.Random(seed)
     np.random.seed(seed)
     labels = class_names()
+    if doodle_samples > 0:
+        labels = labels + [DOODLE_LABEL]
     label_to_idx = {n: i for i, n in enumerate(labels)}
 
     if handwriting_fonts is None:
@@ -150,6 +187,8 @@ def build_dataset(
     X: List[np.ndarray] = []
     y: List[int] = []
     for name in labels:
+        if name == DOODLE_LABEL:
+            continue  # synthesized separately below, not from a font
         sym = symbols.by_name(name)
         char = sym.char
         for path, is_hw in fonts:
@@ -169,5 +208,10 @@ def build_dataset(
                 X.append(_augment(base, rng)); y.append(label_to_idx[name])
         if progress:
             print(f"  {name}: {sum(1 for yi in y if yi == label_to_idx[name])} samples")
+
+    if doodle_samples > 0:
+        didx = label_to_idx[DOODLE_LABEL]
+        for _ in range(doodle_samples):
+            X.append(_make_doodle(rng)); y.append(didx)
 
     return np.stack(X).astype(np.float32), np.asarray(y, dtype=np.int64), labels
