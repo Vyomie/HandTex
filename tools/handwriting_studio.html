@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HandTex — Handwriting Studio</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --ink:#e8eaed; --muted:#9aa0aa;
+    --accent:#4f8cff; --good:#2faf6b; --line:#2a2f3a; --warn:#e0a33a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{display:flex;align-items:center;gap:16px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;letter-spacing:.3px}
+  header h1 span{color:var(--accent)}
+  .grow{flex:1}
+  .pill{background:#0c0e12;border:1px solid var(--line);border-radius:999px;padding:4px 12px;color:var(--muted)}
+  main{display:flex;gap:20px;padding:20px;align-items:flex-start;flex-wrap:wrap;justify-content:center}
+  .stage{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .glyphinfo{display:flex;align-items:baseline;gap:14px}
+  .glyphinfo .big{font-size:34px;font-weight:700}
+  .glyphinfo .nm{color:var(--muted);font-family:ui-monospace,monospace}
+  .canvas-wrap{position:relative;background:#fff;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.45);touch-action:none}
+  canvas{display:block;border-radius:10px;cursor:crosshair;width:520px;height:520px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center}
+  button{background:#222732;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:14px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.good{background:var(--good);border-color:var(--good);color:#fff;font-weight:600}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .nav{display:flex;gap:10px;align-items:center}
+  label.ctl{display:flex;gap:8px;align-items:center;color:var(--muted)}
+  input[type=range]{width:120px}
+  aside{width:330px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  aside h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px}
+  .grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;max-height:300px;overflow:auto}
+  .cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:#0c0e12;border:1px solid var(--line);border-radius:6px;font-size:16px;cursor:pointer;position:relative}
+  .cell.done{border-color:var(--good)}
+  .cell.cur{outline:2px solid var(--accent);outline-offset:1px}
+  .cell.done::after{content:"";position:absolute;right:3px;top:3px;width:6px;height:6px;border-radius:50%;background:var(--good)}
+  .hint{color:var(--muted);font-size:13px;margin-top:10px}
+  .export{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  a.dl{display:none}
+  .kbd{font-family:ui-monospace,monospace;background:#0c0e12;border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Hand<span>Tex</span> · Handwriting Studio</h1>
+  <span class="pill" id="progress">0 / 0</span>
+  <span class="pill" id="doneCount">0 drawn</span>
+  <div class="grow"></div>
+  <label class="ctl">Pen <input type="range" id="pen" min="4" max="34" value="14"></label>
+  <label class="ctl"><input type="checkbox" id="guideRef" checked> trace guide</label>
+</header>
+
+<main>
+  <div class="stage">
+    <div class="glyphinfo">
+      <span class="big" id="curChar">A</span>
+      <span class="nm" id="curName">name</span>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="pad" width="700" height="700"></canvas>
+    </div>
+    <div class="toolbar">
+      <div class="nav">
+        <button id="prev">◀ Prev</button>
+        <button id="next">Next ▶</button>
+      </div>
+      <button id="undo">Undo</button>
+      <button id="clear">Clear</button>
+      <span class="hint">arrows = navigate · <span class="kbd">U</span> undo · <span class="kbd">C</span> clear</span>
+    </div>
+  </div>
+
+  <aside>
+    <h2>All glyphs</h2>
+    <div class="grid" id="grid"></div>
+    <div class="export">
+      <button class="good" id="btnTtf">⬇ Download .ttf</button>
+      <div class="row">
+        <button id="btnSheet">⬇ Sheet .png</button>
+        <button id="btnManifest">⬇ manifest.json</button>
+      </div>
+      <div class="row">
+        <button id="btnSave">Save</button>
+        <button id="btnReset">Reset all</button>
+      </div>
+      <div class="hint" id="status">Your work autosaves in this browser.</div>
+    </div>
+  </aside>
+</main>
+
+<a class="dl" id="dl"></a>
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<script>
+const SYMBOLS = [{"name": "a", "char": "a", "cp": 97}, {"name": "b", "char": "b", "cp": 98}, {"name": "c", "char": "c", "cp": 99}, {"name": "d", "char": "d", "cp": 100}, {"name": "e", "char": "e", "cp": 101}, {"name": "f", "char": "f", "cp": 102}, {"name": "g", "char": "g", "cp": 103}, {"name": "h", "char": "h", "cp": 104}, {"name": "i", "char": "i", "cp": 105}, {"name": "j", "char": "j", "cp": 106}, {"name": "k", "char": "k", "cp": 107}, {"name": "l", "char": "l", "cp": 108}, {"name": "m", "char": "m", "cp": 109}, {"name": "n", "char": "n", "cp": 110}, {"name": "o", "char": "o", "cp": 111}, {"name": "p", "char": "p", "cp": 112}, {"name": "q", "char": "q", "cp": 113}, {"name": "r", "char": "r", "cp": 114}, {"name": "s", "char": "s", "cp": 115}, {"name": "t", "char": "t", "cp": 116}, {"name": "u", "char": "u", "cp": 117}, {"name": "v", "char": "v", "cp": 118}, {"name": "w", "char": "w", "cp": 119}, {"name": "x", "char": "x", "cp": 120}, {"name": "y", "char": "y", "cp": 121}, {"name": "z", "char": "z", "cp": 122}, {"name": "A", "char": "A", "cp": 65}, {"name": "B", "char": "B", "cp": 66}, {"name": "C", "char": "C", "cp": 67}, {"name": "D", "char": "D", "cp": 68}, {"name": "E", "char": "E", "cp": 69}, {"name": "F", "char": "F", "cp": 70}, {"name": "G", "char": "G", "cp": 71}, {"name": "H", "char": "H", "cp": 72}, {"name": "I", "char": "I", "cp": 73}, {"name": "J", "char": "J", "cp": 74}, {"name": "K", "char": "K", "cp": 75}, {"name": "L", "char": "L", "cp": 76}, {"name": "M", "char": "M", "cp": 77}, {"name": "N", "char": "N", "cp": 78}, {"name": "O", "char": "O", "cp": 79}, {"name": "P", "char": "P", "cp": 80}, {"name": "Q", "char": "Q", "cp": 81}, {"name": "R", "char": "R", "cp": 82}, {"name": "S", "char": "S", "cp": 83}, {"name": "T", "char": "T", "cp": 84}, {"name": "U", "char": "U", "cp": 85}, {"name": "V", "char": "V", "cp": 86}, {"name": "W", "char": "W", "cp": 87}, {"name": "X", "char": "X", "cp": 88}, {"name": "Y", "char": "Y", "cp": 89}, {"name": "Z", "char": "Z", "cp": 90}, {"name": "zero", "char": "0", "cp": 48}, {"name": "one", "char": "1", "cp": 49}, {"name": "two", "char": "2", "cp": 50}, {"name": "three", "char": "3", "cp": 51}, {"name": "four", "char": "4", "cp": 52}, {"name": "five", "char": "5", "cp": 53}, {"name": "six", "char": "6", "cp": 54}, {"name": "seven", "char": "7", "cp": 55}, {"name": "eight", "char": "8", "cp": 56}, {"name": "nine", "char": "9", "cp": 57}, {"name": "plus", "char": "+", "cp": 43}, {"name": "minus", "char": "-", "cp": 45}, {"name": "equals", "char": "=", "cp": 61}, {"name": "slash", "char": "/", "cp": 47}, {"name": "lparen", "char": "(", "cp": 40}, {"name": "rparen", "char": ")", "cp": 41}, {"name": "lbracket", "char": "[", "cp": 91}, {"name": "rbracket", "char": "]", "cp": 93}, {"name": "less", "char": "<", "cp": 60}, {"name": "greater", "char": ">", "cp": 62}, {"name": "bar", "char": "|", "cp": 124}, {"name": "exclam", "char": "!", "cp": 33}, {"name": "question", "char": "?", "cp": 63}, {"name": "colon", "char": ":", "cp": 58}, {"name": "semicolon", "char": ";", "cp": 59}, {"name": "comma", "char": ",", "cp": 44}, {"name": "period", "char": ".", "cp": 46}, {"name": "underscore", "char": "_", "cp": 95}, {"name": "apostrophe", "char": "'", "cp": 39}, {"name": "quotedbl", "char": "\"", "cp": 34}, {"name": "asterisk", "char": "*", "cp": 42}, {"name": "grave", "char": "`", "cp": 96}, {"name": "prime", "char": "′", "cp": 8242}, {"name": "degree", "char": "°", "cp": 176}, {"name": "alpha", "char": "α", "cp": 945}, {"name": "beta", "char": "β", "cp": 946}, {"name": "gamma", "char": "γ", "cp": 947}, {"name": "delta", "char": "δ", "cp": 948}, {"name": "epsilon", "char": "ε", "cp": 949}, {"name": "zeta", "char": "ζ", "cp": 950}, {"name": "eta", "char": "η", "cp": 951}, {"name": "theta", "char": "θ", "cp": 952}, {"name": "iota", "char": "ι", "cp": 953}, {"name": "kappa", "char": "κ", "cp": 954}, {"name": "lambda", "char": "λ", "cp": 955}, {"name": "mu", "char": "μ", "cp": 956}, {"name": "nu", "char": "ν", "cp": 957}, {"name": "xi", "char": "ξ", "cp": 958}, {"name": "pi", "char": "π", "cp": 960}, {"name": "rho", "char": "ρ", "cp": 961}, {"name": "sigma", "char": "σ", "cp": 963}, {"name": "tau", "char": "τ", "cp": 964}, {"name": "phi", "char": "φ", "cp": 966}, {"name": "chi", "char": "χ", "cp": 967}, {"name": "psi", "char": "ψ", "cp": 968}, {"name": "omega", "char": "ω", "cp": 969}, {"name": "Gamma", "char": "Γ", "cp": 915}, {"name": "Delta", "char": "Δ", "cp": 916}, {"name": "Theta", "char": "Θ", "cp": 920}, {"name": "Lambda", "char": "Λ", "cp": 923}, {"name": "Xi", "char": "Ξ", "cp": 926}, {"name": "Pi", "char": "Π", "cp": 928}, {"name": "Sigma", "char": "Σ", "cp": 931}, {"name": "Phi", "char": "Φ", "cp": 934}, {"name": "Psi", "char": "Ψ", "cp": 936}, {"name": "Omega", "char": "Ω", "cp": 937}, {"name": "times", "char": "×", "cp": 215}, {"name": "div", "char": "÷", "cp": 247}, {"name": "cdot", "char": "⋅", "cp": 8901}, {"name": "pm", "char": "±", "cp": 177}, {"name": "mp", "char": "∓", "cp": 8723}, {"name": "leq", "char": "≤", "cp": 8804}, {"name": "geq", "char": "≥", "cp": 8805}, {"name": "neq", "char": "≠", "cp": 8800}, {"name": "approx", "char": "≈", "cp": 8776}, {"name": "equiv", "char": "≡", "cp": 8801}, {"name": "propto", "char": "∝", "cp": 8733}, {"name": "infty", "char": "∞", "cp": 8734}, {"name": "partial", "char": "∂", "cp": 8706}, {"name": "nabla", "char": "∇", "cp": 8711}, {"name": "sum", "char": "∑", "cp": 8721}, {"name": "prod", "char": "∏", "cp": 8719}, {"name": "int", "char": "∫", "cp": 8747}, {"name": "sqrt", "char": "√", "cp": 8730}, {"name": "in", "char": "∈", "cp": 8712}, {"name": "notin", "char": "∉", "cp": 8713}, {"name": "subset", "char": "⊂", "cp": 8834}, {"name": "supset", "char": "⊃", "cp": 8835}, {"name": "cup", "char": "∪", "cp": 8746}, {"name": "cap", "char": "∩", "cp": 8745}, {"name": "forall", "char": "∀", "cp": 8704}, {"name": "exists", "char": "∃", "cp": 8707}, {"name": "rightarrow", "char": "→", "cp": 8594}, {"name": "leftarrow", "char": "←", "cp": 8592}, {"name": "leftrightarrow", "char": "↔", "cp": 8596}, {"name": "Rightarrow", "char": "⇒", "cp": 8658}, {"name": "mapsto", "char": "↦", "cp": 8614}];
+
+// ---- design / font geometry -------------------------------------------------
+const CW = 700, CH = 700;          // canvas internal resolution
+const EM = 1000, ASC = 800, DESC = -200;
+const SCALE = EM / CH;             // px -> font units
+const BASELINE_PX = ASC / EM * CH; // y where font-y = 0
+const SIDE = 60;                   // side bearing (font units)
+
+const pad = document.getElementById('pad');
+const ctx = pad.getContext('2d');
+let penW = 14;
+let idx = 0;
+// strokes[i] = array of strokes; stroke = array of [x,y] in canvas coords
+let strokes = {};
+
+const $ = id => document.getElementById(id);
+const STORE = 'handtex_studio_v2';
+
+// ---- persistence ------------------------------------------------------------
+function save(){
+  try{ localStorage.setItem(STORE, JSON.stringify({idx, strokes}));
+       $('status').textContent='Saved ✓'; setTimeout(()=>$('status').textContent='Your work autosaves in this browser.',1200);
+  }catch(e){ $('status').textContent='Save failed: '+e; }
+}
+function load(){
+  try{ const d=JSON.parse(localStorage.getItem(STORE)||'{}');
+       if(d.strokes) strokes=d.strokes; if(Number.isInteger(d.idx)) idx=d.idx; }catch(e){}
+}
+
+// ---- drawing ----------------------------------------------------------------
+function curStrokes(){ return strokes[idx] || (strokes[idx]=[]); }
+
+function drawGuides(){
+  ctx.clearRect(0,0,CW,CH);
+  const yOf = u => (ASC - u)/EM*CH;
+  // panels
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,CW,CH);
+  // x-height & cap (dashed), baseline (solid), descender (dashed)
+  const lines = [[700,'#d7dbe0',[6,6]],[500,'#e2e6ea',[6,6]],[0,'#9fb6e8',[]],[-200,'#eef0f3',[6,6]]];
+  ctx.lineWidth=1;
+  for(const [u,c,dash] of lines){
+    ctx.strokeStyle=c; ctx.setLineDash(dash); ctx.beginPath();
+    ctx.moveTo(0,yOf(u)); ctx.lineTo(CW,yOf(u)); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  // center vertical
+  ctx.strokeStyle='#eef0f3'; ctx.beginPath(); ctx.moveTo(CW/2,0); ctx.lineTo(CW/2,CH); ctx.stroke();
+  // reference glyph to trace
+  if($('guideRef').checked){
+    const s = SYMBOLS[idx];
+    ctx.fillStyle='rgba(60,90,160,0.16)';
+    ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    ctx.font = Math.round(0.62*CH)+'px Georgia, "Times New Roman", serif';
+    ctx.fillText(s.char, CW/2, BASELINE_PX);
+  }
+}
+
+function drawStrokes(){
+  ctx.strokeStyle='#111'; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=penW;
+  for(const st of curStrokes()){
+    if(st.length===1){ // a dot
+      ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(st[0][0],st[0][1],penW/2,0,7); ctx.fill(); continue;
+    }
+    ctx.beginPath(); ctx.moveTo(st[0][0],st[0][1]);
+    for(let i=1;i<st.length;i++) ctx.lineTo(st[i][0],st[i][1]);
+    ctx.stroke();
+  }
+}
+function redraw(){ drawGuides(); drawStrokes(); }
+
+// pointer -> canvas coords
+function pt(e){
+  const r = pad.getBoundingClientRect();
+  return [ (e.clientX-r.left)*(CW/r.width), (e.clientY-r.top)*(CH/r.height) ];
+}
+let drawing=false, cur=null;
+pad.addEventListener('pointerdown', e=>{
+  pad.setPointerCapture(e.pointerId); drawing=true; cur=[pt(e)]; curStrokes().push(cur); redraw();
+});
+pad.addEventListener('pointermove', e=>{
+  if(!drawing) return;
+  const p=pt(e), last=cur[cur.length-1];
+  if(Math.hypot(p[0]-last[0],p[1]-last[1])>1.2){ cur.push(p); redraw(); }
+});
+function endStroke(){ if(drawing){ drawing=false; cur=null; save(); } }
+pad.addEventListener('pointerup', endStroke);
+pad.addEventListener('pointerleave', endStroke);
+pad.addEventListener('pointercancel', endStroke);
+
+// ---- navigation / ui --------------------------------------------------------
+function refresh(){
+  const s=SYMBOLS[idx];
+  $('curChar').textContent=s.char; $('curName').textContent=s.name;
+  $('progress').textContent=(idx+1)+' / '+SYMBOLS.length;
+  $('doneCount').textContent=Object.values(strokes).filter(a=>a&&a.length).length+' drawn';
+  $('prev').disabled=idx===0; $('next').disabled=idx===SYMBOLS.length-1;
+  redraw(); buildGrid();
+}
+function go(n){ idx=Math.max(0,Math.min(SYMBOLS.length-1,n)); save(); refresh(); }
+$('prev').onclick=()=>go(idx-1); $('next').onclick=()=>go(idx+1);
+$('undo').onclick=()=>{ curStrokes().pop(); save(); refresh(); };
+$('clear').onclick=()=>{ strokes[idx]=[]; save(); refresh(); };
+$('pen').oninput=e=>{ penW=+e.target.value; redraw(); };
+$('guideRef').onchange=redraw;
+$('btnSave').onclick=save;
+$('btnReset').onclick=()=>{ if(confirm('Erase ALL drawn glyphs?')){ strokes={}; idx=0; save(); refresh(); } };
+document.addEventListener('keydown', e=>{
+  if(e.target.tagName==='INPUT') return;
+  if(e.key==='ArrowRight') go(idx+1);
+  else if(e.key==='ArrowLeft') go(idx-1);
+  else if(e.key.toLowerCase()==='u') $('undo').click();
+  else if(e.key.toLowerCase()==='c') $('clear').click();
+});
+
+function buildGrid(){
+  const g=$('grid'); g.innerHTML='';
+  SYMBOLS.forEach((s,i)=>{
+    const d=document.createElement('div');
+    d.className='cell'+(strokes[i]&&strokes[i].length?' done':'')+(i===idx?' cur':'');
+    d.textContent=s.char; d.title=s.name;
+    d.onclick=()=>go(i); g.appendChild(d);
+  });
+}
+
+// ---- geometry helpers -------------------------------------------------------
+function toFont(p){ return [ p[0]*SCALE, (BASELINE_PX - p[1])*SCALE ]; }
+function rdp(points, eps){
+  if(points.length<3) return points;
+  let dmax=0,idx=0; const a=points[0],b=points[points.length-1];
+  for(let i=1;i<points.length-1;i++){ const d=segDist(points[i],a,b); if(d>dmax){dmax=d;idx=i;} }
+  if(dmax>eps){ const l=rdp(points.slice(0,idx+1),eps), r=rdp(points.slice(idx),eps);
+    return l.slice(0,-1).concat(r); }
+  return [a,b];
+}
+function segDist(p,a,b){ const dx=b[0]-a[0],dy=b[1]-a[1]; const l2=dx*dx+dy*dy;
+  if(l2===0) return Math.hypot(p[0]-a[0],p[1]-a[1]);
+  let t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l2; t=Math.max(0,Math.min(1,t));
+  return Math.hypot(p[0]-(a[0]+t*dx),p[1]-(a[1]+t*dy)); }
+function signedArea(c){ let s=0; for(let i=0;i<c.length;i++){ const a=c[i],b=c[(i+1)%c.length]; s+=a[0]*b[1]-b[0]*a[1]; } return s/2; }
+function ccw(c){ return signedArea(c)>0 ? c : c.slice().reverse(); }
+
+// stroke (font-coord points) -> list of CCW convex contours of half-width r
+function strokeContours(fpts, r){
+  const out=[];
+  const circle=(cx,cy)=>{ const c=[]; const N=10; for(let i=0;i<N;i++){const a=2*Math.PI*i/N; c.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);} return ccw(c); };
+  if(fpts.length===1){ out.push(circle(fpts[0][0],fpts[0][1])); return out; }
+  for(const p of fpts) out.push(circle(p[0],p[1]));
+  for(let i=0;i<fpts.length-1;i++){
+    const a=fpts[i],b=fpts[i+1]; const dx=b[0]-a[0],dy=b[1]-a[1]; const L=Math.hypot(dx,dy);
+    if(L<1e-3) continue; const nx=-dy/L*r, ny=dx/L*r;
+    out.push(ccw([[a[0]+nx,a[1]+ny],[b[0]+nx,b[1]+ny],[b[0]-nx,b[1]-ny],[a[0]-nx,a[1]-ny]]));
+  }
+  return out;
+}
+
+// ---- TTF export -------------------------------------------------------------
+function buildFont(){
+  if(typeof opentype==='undefined'){ alert('opentype.js failed to load (need internet for the .ttf export). The PNG sheet export still works offline.'); return; }
+  const rFont = (penW/2)*SCALE;
+  const glyphs=[];
+  const notdef=new opentype.Glyph({name:'.notdef',unicode:0,advanceWidth:EM/2,path:new opentype.Path()});
+  glyphs.push(notdef);
+  glyphs.push(new opentype.Glyph({name:'space',unicode:32,advanceWidth:EM/3,path:new opentype.Path()}));
+
+  let drawn=0;
+  SYMBOLS.forEach((s,i)=>{
+    const sts=strokes[i]; if(!sts||!sts.length) return;
+    // gather contours in font coords
+    let contours=[]; let minX=1e9,maxX=-1e9;
+    for(const st of sts){
+      let fp=st.map(toFont);
+      if(fp.length>2) fp=rdp(fp,1.2*SCALE);
+      for(const c of strokeContours(fp,rFont)){ contours.push(c); for(const q of c){ minX=Math.min(minX,q[0]); maxX=Math.max(maxX,q[0]); } }
+    }
+    if(!contours.length) return;
+    const shift = SIDE - minX;                       // left side bearing
+    const adv = Math.round((maxX-minX)+2*SIDE);
+    const path=new opentype.Path();
+    for(const c of contours){
+      path.moveTo(Math.round(c[0][0]+shift),Math.round(c[0][1]));
+      for(let k=1;k<c.length;k++) path.lineTo(Math.round(c[k][0]+shift),Math.round(c[k][1]));
+      path.close();
+    }
+    glyphs.push(new opentype.Glyph({name:s.name,unicode:s.cp,advanceWidth:adv,path}));
+    drawn++;
+  });
+  if(!drawn){ alert('Draw at least one glyph first.'); return; }
+  const font=new opentype.Font({familyName:'MyHand',styleName:'Regular',unitsPerEm:EM,ascender:ASC,descender:DESC,glyphs});
+  const buf=font.toArrayBuffer();
+  download(new Blob([buf],{type:'font/ttf'}),'MyHand-Regular.ttf');
+  $('status').textContent=`Exported .ttf with ${drawn} glyphs.`;
+}
+
+// ---- structured sheet PNG (matches handtex template geometry) ---------------
+const SHEET={cell:256,cols:8,margin:40,baselineFrac:0.78};
+function buildSheet(){
+  const n=SYMBOLS.length, rows=Math.ceil(n/SHEET.cols);
+  const W=SHEET.margin*2+SHEET.cols*SHEET.cell, H=SHEET.margin*2+rows*SHEET.cell;
+  const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d');
+  x.fillStyle='#fff'; x.fillRect(0,0,W,H);
+  x.strokeStyle='#000'; x.lineCap='round'; x.lineJoin='round';
+  SYMBOLS.forEach((s,i)=>{
+    const r=Math.floor(i/SHEET.cols), col=i%SHEET.cols;
+    const ox=SHEET.margin+col*SHEET.cell, oy=SHEET.margin+r*SHEET.cell;
+    // light cell border + baseline (so it's a usable visual sheet too)
+    x.strokeStyle='#ddd'; x.lineWidth=1; x.strokeRect(ox,oy,SHEET.cell,SHEET.cell);
+    const sts=strokes[i]; if(!sts||!sts.length) return;
+    const k=SHEET.cell/CW;                          // canvas->cell scale
+    const yShift=(SHEET.baselineFrac*SHEET.cell)-(BASELINE_PX*k); // align baselines
+    x.strokeStyle='#000'; x.lineWidth=Math.max(2,penW*k);
+    for(const st of sts){
+      x.beginPath();
+      st.forEach((p,j)=>{ const X=ox+p[0]*k, Y=oy+p[1]*k+yShift; j?x.lineTo(X,Y):x.moveTo(X,Y); });
+      if(st.length===1){ x.arc(ox+st[0][0]*k,oy+st[0][1]*k+yShift,x.lineWidth/2,0,7); x.fill(); }
+      else x.stroke();
+    }
+  });
+  c.toBlob(b=>download(b,'handwriting_sheet.png'),'image/png');
+}
+function buildManifest(){
+  const m={geometry:{cell:SHEET.cell,cols:SHEET.cols,margin:SHEET.margin,
+            baseline_frac:SHEET.baselineFrac,rows:Math.ceil(SYMBOLS.length/SHEET.cols)},
+           names:SYMBOLS.map(s=>s.name)};
+  download(new Blob([JSON.stringify(m,null,2)],{type:'application/json'}),'manifest.json');
+}
+
+function download(blob,name){ const a=$('dl'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
+
+$('btnTtf').onclick=buildFont;
+$('btnSheet').onclick=buildSheet;
+$('btnManifest').onclick=buildManifest;
+
+// ---- boot -------------------------------------------------------------------
+load(); refresh();
+</script>
+</body>
+</html>

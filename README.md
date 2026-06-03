@@ -79,6 +79,15 @@ python -m handtex demo --out out/
 
 ### Make a font from *your* handwriting
 
+The easiest way is the **browser studio** — trace each glyph by hand and export
+a `.ttf` directly (or a structured sheet for the steps below):
+
+```bash
+python -m http.server   # open http://localhost:8000/tools/handwriting_studio.html
+```
+
+Or capture on paper:
+
 ```bash
 # 1. Print a capture sheet (one cell per glyph, with baseline guides):
 python -m handtex template --out sheet.png --manifest sheet.json
