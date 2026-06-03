@@ -47,8 +47,13 @@ far milder on uniform handwriting.
 
 ## Notes
 
-`MyHand-FromOCR.ttf` is the honest output of the current OCR: segmentation is
-solid (65/70 glyphs found and separated), but the classifier — trained only on
-*printed* fonts so far — mislabels some handwritten letters (e.g. `B`→β,
-`C`→⊂, `D`→p). Training the classifier on real handwriting fonts (see
-`scripts/fetch_handwriting_fonts.sh`) is what closes that gap.
+`MyHand-FromOCR.ttf` is the honest output of the OCR. After training the
+classifier on real handwriting fonts (`scripts/fetch_handwriting_fonts.sh` +
+this `MyHandwriting.ttf`), recognition of the grid jumped from ~50% to ~90%:
+the full A–Z, a–z and 0–9 now come through, with only a few slips (`Y`→γ,
+`r`→Y, lowercase `l`→|). Compare `MyHand-FromOCR_specimen.png` (a clean
+pangram) against the earlier print-only result described above.
+
+`preprocessing_before_after.png` shows the preprocessing stage (resize →
+flatten illumination → contrast stretch → deskew) recovering a deliberately
+degraded photo of the sheet: glyphs found rose from 35 to 58.

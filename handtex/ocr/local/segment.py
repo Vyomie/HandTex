@@ -52,9 +52,18 @@ def _hsub(a: BBox, b: BBox) -> float:
 
 
 def segment_image(image_path: str, min_area_frac: float = 0.0001,
-                  min_area_abs: float = 20.0) -> List[Segment]:
-    """Return glyph segments left-to-right."""
-    gray = np.asarray(Image.open(image_path).convert("L"))
+                  min_area_abs: float = 20.0, preprocess: bool = True) -> List[Segment]:
+    """Return glyph segments left-to-right.
+
+    By default the image is cleaned first (resize, illumination flattening,
+    contrast stretch, deskew) so faint or tilted glyphs are still detected;
+    pass ``preprocess=False`` to segment the raw image.
+    """
+    if preprocess:
+        from ...preprocess import preprocess as _preprocess
+        gray = _preprocess(image_path)
+    else:
+        gray = np.asarray(Image.open(image_path).convert("L"))
     ink, binary = _ink_and_binary(gray)
 
     lbl = label(binary)

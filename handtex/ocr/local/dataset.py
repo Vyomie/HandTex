@@ -13,7 +13,8 @@ import glob
 import os
 import random
 from functools import lru_cache
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from fontTools.ttLib import TTFont
@@ -28,11 +29,29 @@ _FONT_GLOBS = [
 ]
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_HANDWRITING_GLOBS = [
+    str(_REPO_ROOT / "assets" / "handwriting_fonts" / "*.ttf"),
+    str(_REPO_ROOT / "examples" / "handwriting_to_font" / "MyHandwriting.ttf"),
+]
+
+
 @lru_cache(maxsize=1)
 def discover_fonts() -> List[str]:
     paths: List[str] = []
     for pat in _FONT_GLOBS:
         paths.extend(glob.glob(pat, recursive=True))
+    return sorted(set(paths))
+
+
+@lru_cache(maxsize=1)
+def discover_handwriting_fonts() -> List[str]:
+    """Handwriting fonts (downloaded set + the user's own) used to close the
+    print→handwriting domain gap. Reproduce the downloaded set with
+    ``scripts/fetch_handwriting_fonts.sh``."""
+    paths: List[str] = []
+    for pat in _HANDWRITING_GLOBS:
+        paths.extend(glob.glob(pat))
     return sorted(set(paths))
 
 
@@ -99,9 +118,15 @@ def build_dataset(
     per_class_per_font: int = 4,
     max_fonts: int = 40,
     seed: int = 0,
+    handwriting_fonts: Optional[List[str]] = None,
+    handwriting_oversample: int = 5,
     progress: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     """Render the full synthetic dataset.
+
+    Print fonts give broad coverage (incl. Greek/math); handwriting fonts are
+    *oversampled* so the classifier generalizes to real handwriting for the
+    Latin letters, digits and punctuation they cover.
 
     Returns ``(X, y, labels)`` where ``X`` is ``(N, OUT_SIZE, OUT_SIZE)``
     float32, ``y`` is ``(N,)`` int64 class indices, and ``labels`` maps index
@@ -111,19 +136,25 @@ def build_dataset(
     np.random.seed(seed)
     labels = class_names()
     label_to_idx = {n: i for i, n in enumerate(labels)}
-    fonts = discover_fonts()[:max_fonts]
-    if not fonts:
+
+    if handwriting_fonts is None:
+        handwriting_fonts = discover_handwriting_fonts()
+    print_fonts = discover_fonts()[:max_fonts]
+    if not print_fonts and not handwriting_fonts:
         raise RuntimeError("no fonts found to synthesize training data")
+
+    # (path, is_handwriting); handwriting fonts get more augmented variants.
+    fonts: List[Tuple[str, bool]] = [(f, False) for f in print_fonts]
+    fonts += [(f, True) for f in handwriting_fonts]
 
     X: List[np.ndarray] = []
     y: List[int] = []
     for name in labels:
         sym = symbols.by_name(name)
         char = sym.char
-        covering = [f for f in fonts if font_covers(f, char)]
-        if not covering:
-            continue
-        for path in covering:
+        for path, is_hw in fonts:
+            if not font_covers(path, char):
+                continue
             try:
                 font = ImageFont.truetype(path, 44)
             except Exception:
@@ -131,11 +162,12 @@ def build_dataset(
             base = _render_glyph(char, font)
             if base.max() <= 0:
                 continue
+            variants = per_class_per_font * (handwriting_oversample if is_hw else 1)
             # one clean sample + augmented variants
             X.append(normalize_glyph(base)); y.append(label_to_idx[name])
-            for _ in range(per_class_per_font):
+            for _ in range(variants):
                 X.append(_augment(base, rng)); y.append(label_to_idx[name])
         if progress:
-            print(f"  {name}: {len([1 for yi in y if yi == label_to_idx[name]])} samples")
+            print(f"  {name}: {sum(1 for yi in y if yi == label_to_idx[name])} samples")
 
     return np.stack(X).astype(np.float32), np.asarray(y, dtype=np.int64), labels

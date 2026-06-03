@@ -18,6 +18,9 @@ One font file, three jobs:
 
 ```
 whiteboard image
+      │  preprocess (handtex.preprocess)  resize, flatten light, contrast, deskew
+      ▼
+cleaned image
       │  ocr        (handtex.ocr)      pluggable: mock | local CNN | vision model
       ▼
 list[RecognizedGlyph]                  each: name + char + pixel bbox + confidence
@@ -42,9 +45,15 @@ image ─► segment (connected components, merge stacked marks like =, i, ÷)
 ```
 
 It is bootstrapped on **synthetic data** — every symbol rendered across all
-installed fonts with augmentations (`handtex train-ocr`) — so no hand-labeling
-is needed to start. There is a real print→handwriting domain gap; fine-tuning
-on your own capture-sheet glyphs is the way to close it (roadmap).
+installed fonts *plus a set of real handwriting fonts*
+(`scripts/fetch_handwriting_fonts.sh`, oversampled) with augmentations
+(`handtex train-ocr`) — so no hand-labeling is needed and it already
+generalizes to handwritten Latin letters and digits. Greek/math still lean on
+printed fonts (no handwritten samples yet).
+
+Images are **preprocessed** first (`handtex.preprocess`): resize, illumination
+flattening, contrast stretch, and deskew — so faint, shadowed or tilted photos
+still segment cleanly (`handtex preprocess IMG --out clean.png`).
 
 ## Quickstart
 

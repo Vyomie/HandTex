@@ -54,6 +54,16 @@ def _cmd_build_font(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_preprocess(args: argparse.Namespace) -> int:
+    from PIL import Image
+    from .preprocess import preprocess
+
+    cleaned = preprocess(args.image)
+    Image.fromarray(cleaned).save(args.out)
+    print(f"cleaned image ({cleaned.shape[1]}x{cleaned.shape[0]}) -> {args.out}")
+    return 0
+
+
 def _cmd_font_from_image(args: argparse.Namespace) -> int:
     from .font.from_image import font_from_image
 
@@ -147,6 +157,11 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--family", default="HandTex")
     b.add_argument("--out", default="HandTex-Regular.ttf")
     b.set_defaults(func=_cmd_build_font)
+
+    pp = sub.add_parser("preprocess", help="clean an image (resize, deskew, flatten light, contrast)")
+    pp.add_argument("image")
+    pp.add_argument("--out", default="cleaned.png")
+    pp.set_defaults(func=_cmd_preprocess)
 
     fi = sub.add_parser("font-from-image", help="OCR a handwriting photo and build a font (end-to-end)")
     fi.add_argument("image")
