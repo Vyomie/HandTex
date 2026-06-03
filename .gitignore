@@ -13,6 +13,11 @@ venv/
 *.ttf
 *.otf
 !tests/**/*.ttf
+# committed example artifacts (kept intentionally)
+!examples/**/*.ttf
+
+# downloaded handwriting fonts (reproduce via scripts/fetch_handwriting_fonts.sh)
+/assets/handwriting_fonts/
 
 # Editor / OS
 .DS_Store
